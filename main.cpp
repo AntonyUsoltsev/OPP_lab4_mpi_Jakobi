@@ -38,14 +38,15 @@ public:
     }
 
     void count_next_phi(int i, int j) {
+        int cur_pos = j * N_x + i;
+        double up_y_neughbor = (cur_pos + N_x) > (grid_size - 1) ? 1 : grid[cur_pos + N_x];
+        double down_y_neughbor = (cur_pos - N_x) < 0 ? 1 : grid[cur_pos - N_x];
 
-        double up_x_neughbor = (j * N_x + i + N_x) > (grid_size - 1) ? 1 : grid[j * N_x + i + N_x];
-        double down_x_neughbor = (j * N_x + i - N_x) < 0 ? 1 : grid[j * N_x + i - N_x];
-        double left_y_neighbor = ((j * N_x + i) % N_x == 0) ? 1 : grid[i - 1];
-        double right_y_neighbor = ((j * N_x + i + 1) % N_x == 0) ? 1 : grid[i + 1];
+        double left_x_neighbor = ((cur_pos) % N_x == 0) ? 1 : grid[i - 1];
+        double right_x_neighbor = ((cur_pos + 1) % N_x == 0) ? 1 : grid[i + 1];
+
         double coefc = coef;
-        double v1 =
-                (up_x_neughbor + down_x_neughbor) / (h_x * h_x) + (left_y_neighbor + right_y_neighbor) / (h_y * h_y);
+        double v1 = (left_x_neighbor + right_x_neighbor) / (h_x * h_x) + (up_y_neughbor + down_y_neughbor) / (h_y * h_y);
         double phivar = phi(i, j, 0);
         double next_var = coefc * (v1 - 6 + a * phivar);
         next_phi[j * N_x + i] = next_var;
@@ -113,8 +114,8 @@ int main() {
         for (int j = -10; j <= 10; j += 2) {
             double c = (double) j / 10;
             double b = (double) i / 10;
-           // std::cout << c * c + b * b << " ";
-            printf("%.2lf ",  c * c + b * b);
+            // std::cout << c * c + b * b << " ";
+            printf("%.2lf ", c * c + b * b);
         }
         std::cout << std::endl;
     }
