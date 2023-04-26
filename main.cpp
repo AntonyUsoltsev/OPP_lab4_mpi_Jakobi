@@ -21,6 +21,7 @@ class Grid_3D {
 public:
     std::vector<double> grid;
     std::vector<double> next_phi;
+    char buffer[1024];
 
     double maxdif, cur_maxdif;
 
@@ -40,7 +41,7 @@ public:
 
     Grid_3D(int x_size, int y_size, int z_size, int rank) {
         if (x_size > N_x or y_size > N_y or z_size > N_z) {
-            throw std::runtime_error("Bad size");
+            MPI_Abort(MPI_COMM_WORLD, 0);
         }
         this->x_size = x_size + 2;
         this->y_size = y_size;
@@ -64,38 +65,52 @@ public:
                     grid[grid_ind_from_coords(0, j, i)] = phi(-1, j, i);
                 }
             }
+//            FILE *file = fopen("proc0.txt", "w");
+//            print_grid_with_borders(file);
+//            fclose(file);
         }
         if (comm_rank == (size - 1)) {
+            // std::cout<<"fill grid second";
             for (int i = 0; i < z_size; i++) {
                 for (int j = 0; j < y_size; j++) {
                     grid[grid_ind_from_coords(x_size - 1, j, i)] = phi(x_size - 2, j, i);
                 }
             }
+//            FILE *file = fopen("proc1.txt", "w");
+//            print_grid_with_borders(file);
+//            fclose(file);
         }
     }
 
     void iteration(int comm_size) {
-        int layer_size = y_size * z_size;
-
         MPI_Request request_send_left, request_send_right, request_recv_left, request_recv_right;
-        double *right_send_border = grid.data() + z_size * y_size * (x_size - 2);
-        double *right_recv_border = grid.data() + z_size * y_size * (x_size - 1);
+
         if (comm_size > 1) {
+            int layer_size = y_size * z_size;
+            double *right_send_border = grid.data() + z_size * y_size * (x_size - 2);
+            double *right_recv_border = grid.data() + z_size * y_size * (x_size - 1);
+
             if (comm_rank == RANK_ROOT) {
-                MPI_Isend(right_send_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD,&request_send_right);
-            } else if (comm_rank == comm_size - 1) {
-                MPI_Isend(grid.data() + z_size * y_size, layer_size, MPI_DOUBLE, comm_rank - 1, 1, MPI_COMM_WORLD,&request_send_left);
+                MPI_Isend(right_send_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD,
+                          &request_send_right);
+            } else if (comm_rank == (comm_size - 1)) {
+                MPI_Isend(grid.data() + z_size * y_size, layer_size, MPI_DOUBLE, comm_rank - 1, 1, MPI_COMM_WORLD,
+                          &request_send_left);
             } else {
-                MPI_Isend(right_send_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD,&request_send_right);
-                MPI_Isend(grid.data() + z_size * y_size, layer_size, MPI_DOUBLE, comm_rank - 1, 1, MPI_COMM_WORLD,&request_send_left);
+                MPI_Isend(right_send_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD,
+                          &request_send_right);
+                MPI_Isend(grid.data() + z_size * y_size, layer_size, MPI_DOUBLE, comm_rank - 1, 1, MPI_COMM_WORLD,
+                          &request_send_left);
             }
 
             if (comm_rank == RANK_ROOT) {
-                MPI_Irecv(right_recv_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1,MPI_COMM_WORLD, &request_recv_right);
-            } else if (comm_rank == comm_size - 1) {
+                MPI_Irecv(right_recv_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD,
+                          &request_recv_right);
+            } else if (comm_rank == (comm_size - 1)) {
                 MPI_Irecv(grid.data(), layer_size, MPI_DOUBLE, comm_rank - 1, 1, MPI_COMM_WORLD, &request_recv_left);
             } else {
-                MPI_Irecv(right_recv_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD, &request_recv_right);
+                MPI_Irecv(right_recv_border, layer_size, MPI_DOUBLE, comm_rank + 1, 1, MPI_COMM_WORLD,
+                          &request_recv_right);
                 MPI_Irecv(grid.data(), layer_size, MPI_DOUBLE, comm_rank - 1, 1, MPI_COMM_WORLD, &request_recv_left);
             }
         }
@@ -104,23 +119,20 @@ public:
             for (int k = 0; k < z_size; ++k) {
                 for (int j = 0; j < y_size; ++j) {
                     count_next_phi(i, j, k);
-
                 }
             }
         }
-        MPI_Status status;
-        if (comm_size > 1) {
 
+        if (comm_size > 1) {
             if (comm_rank == RANK_ROOT) {
-                MPI_Wait(&request_recv_right, &status);
+                MPI_Wait(&request_recv_right, MPI_STATUS_IGNORE);
             } else if (comm_rank == comm_size - 1) {
-                MPI_Wait(&request_recv_left, &status);
+                MPI_Wait(&request_recv_left, MPI_STATUS_IGNORE);
             } else {
-                MPI_Wait(&request_recv_right, &status);
-                MPI_Wait(&request_recv_left, &status);
+                MPI_Wait(&request_recv_right, MPI_STATUS_IGNORE);
+                MPI_Wait(&request_recv_left, MPI_STATUS_IGNORE);
             }
-            std::cout << "aftwait";
-            std::cout.flush();
+
         }
 
         for (int k = 0; k < z_size; ++k) {
@@ -129,9 +141,7 @@ public:
                 count_next_phi(x_size - 2, j, k);
             }
         }
-
         count_diff();
-        MPI_Barrier(MPI_COMM_WORLD);
         MPI_Allreduce(&cur_maxdif, &maxdif, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         std::cout << maxdif << " ";
     }
@@ -171,20 +181,20 @@ public:
 
     void print_grid() {
         for (int k = 0; k < x_size; ++k) {
-            std::cout << "Slice x = " << k << std::endl;
+            sprintf(buffer, "Slice x = %d\n", k);
             for (int i = 0; i < z_size; i++) {
                 for (int j = 0; j < y_size; j++) {
-                    printf("%.2lf ", grid[grid_ind_from_coords(k, i, j)]);
+                    sprintf(buffer, "%.2lf ", grid[grid_ind_from_coords(k, i, j)]);
                 }
-                std::cout << std::endl;
+                sprintf(buffer, "\n");
             }
-            std::cout << std::endl;
+            sprintf(buffer, "\n");
         }
     }
 
-    void print_grid(FILE *file) {
-        for (int k = 1; k < x_size - 1; ++k) {
-            fprintf(file, "Slice x = %.2lf\n", (x_0 + (k - 1) * h_x));
+    void print_grid_with_borders(FILE *file) {
+        for (int k = 0; k < x_size; ++k) {
+            fprintf(file, "Slice x = %.2lf\n", (x_0 + ((k - 1) + comm_rank * (x_size - 2)) * h_x));
             for (int i = 0; i < z_size; i++) {
                 for (int j = 0; j < y_size; j++) {
                     fprintf(file, "%.4lf ", grid[grid_ind_from_coords(k, i, j)]);
@@ -193,8 +203,23 @@ public:
             }
             fputc('\n', file);
         }
-        std::cout << "end write" << std::endl;
+        //std::cout << "end write" << std::endl;
     }
+
+    void print_grid(FILE *file) {
+        for (int k = 1; k < x_size-1; ++k) {
+            fprintf(file, "Slice x = %.2lf\n", (x_0 + ((k - 1) + comm_rank * (x_size - 2)) * h_x));
+            for (int i = 0; i < z_size; i++) {
+                for (int j = 0; j < y_size; j++) {
+                    fprintf(file, "%.4lf ", grid[grid_ind_from_coords(k, i, j)]);
+                }
+                fputc('\n', file);
+            }
+            fputc('\n', file);
+        }
+        //std::cout << "end write" << std::endl;
+    }
+
 
     void count_delta() {
         double max_delta = -1;
@@ -209,7 +234,7 @@ public:
                 }
             }
         }
-        std::cout << max_delta;
+        std::cout << "Max delta: " << max_delta;
     }
 
 };
@@ -228,24 +253,24 @@ int main(int argc, char **argv) {
     } else {
         x_size = N_x / size;
     }
-    Grid_3D grid3D(x_size, N_y, N_z, 0);
-
+    //printf("Im proc %d, create grid class\n",rank);
+    Grid_3D grid3D(x_size, N_y, N_z, rank);
+    //printf("Im proc %d, fill grid\n",rank);
     grid3D.fill_grid(size);
-
+    //printf("Im proc %d, start iteration\n",rank);
     int iter = 1;
     while (grid3D.maxdif > eps) {
         //   std::cout << "Maxdif from while " <<grid3D.maxdif << " ";
-        std::cout << "Iteration " << iter << '\n';
+        //   std::cout << "Iteration " << iter << '\n';
         grid3D.iteration(size);
         iter++;
     }
-    //   std::cout << "Maxdif after while " <<grid3D.maxdif << " ";
 
-    if (rank == RANK_ROOT) {
-        FILE *file = fopen("result.txt", "w");
-        grid3D.print_grid(file);
-        fclose(file);
-    }
+    std::string file_name;
+    file_name = "res" + std::to_string(rank) + ".txt";
+    FILE * file = fopen (file_name.c_str(),"w");
+    grid3D.print_grid(file);
+
     grid3D.count_delta();
     std::cout << std::endl;
 
