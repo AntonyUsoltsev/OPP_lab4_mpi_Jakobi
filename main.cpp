@@ -146,7 +146,7 @@ public:
     }
 
 
-    void count_next_phi(int i, int j, int k) {
+    void    count_next_phi(int i, int j, int k) {
 
         double left_x_neighbor = grid[grid_ind_from_coords(i - 1, j, k)];
         double right_x_neighbor = grid[grid_ind_from_coords(i + 1, j, k)];
@@ -214,14 +214,12 @@ int main(int argc, char **argv) {
     Grid_3D grid3D(x_size, N_y, N_z, rank);
     grid3D.fill_grid(size);
 
-    int iter = 1;
-//    std::cout << "Proc:" << rank << " ";
     double start = MPI_Wtime();
     while (grid3D.max_diff > eps) {
         grid3D.iteration(size);
-        iter++;
     }
     double end = MPI_Wtime();
+
     grid3D.count_delta();
     if (rank == RANK_ROOT) {
         std::cout << "Max delta: " << grid3D.max_delta << std::endl;

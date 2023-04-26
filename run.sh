@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#PBS -l select=1:ncpus=1:mpiprocs=8:mem=10000m,place=scatter
+#PBS -l select=1:ncpus=1:mpiprocs=1:mem=10000m,place=scatter
 #PBS -l walltime=00:01:00
 #PBS -m n
 #PBS -o out.txt
