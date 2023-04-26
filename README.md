@@ -5,7 +5,7 @@ Compile command:
 
 MPE compile command:
 
-    mpicxx main.c -o main -Wpedantic -Werror -Wall -O3 --std=c++11
+    mpecxx -mpilog  main.c -o main -Wpedantic -Werror -Wall -O3 --std=c++11
 
 Run command:
 
